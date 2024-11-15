@@ -7,3 +7,4 @@ librosa
 matplotlib
 scipy
 numpy
+# dependencies
