@@ -59,7 +59,7 @@ elif tab == "Débruitage":
 
     if uploaded_file is not None:
         try:
-            waveform, sr = torchaudio.load(uploaded_file)
+            waveform, sr = torchaudio.load(uploaded_file, backend="soundfile")
         except Exception as e:
             st.error(f"Erreur lors du chargement de l'audio : {str(e)}")
             st.stop()
@@ -98,7 +98,7 @@ elif tab == "Détectage de Bruit":
 
     if uploaded_file is not None:
         # Charger le fichier audio
-        waveform, sr = torchaudio.load(uploaded_file)
+        waveform, sr = torchaudio.load(uploaded_file, backend="soundfile")
         waveform = waveform.unsqueeze(0)
 
         # Appliquer le modèle pour séparer les sources
@@ -174,7 +174,7 @@ elif tab == "Correction rapide":
     if uploaded_file is not None:
         try:
             # Charger le fichier audio
-            waveform, sr = torchaudio.load(uploaded_file)
+            waveform, sr = torchaudio.load(uploaded_file, backend="soundfile")
 
             # Ajouter une dimension pour le lot
             waveform = waveform.unsqueeze(0)  # Pour [1, canaux, longueur]
