@@ -13,9 +13,6 @@ import base64
 import tempfile
 import uuid
 
-
-
-
 # Charger le modèle pré-entraîné de Demucs
 model = pretrained.get_model('mdx_extra')
 
@@ -51,7 +48,7 @@ st.markdown(
 )
 
 # Ajouter des onglets dans une barre latérale
-tab = st.sidebar.radio("Navigation", ["Accueil", "Correction rapide","Détectage de Bruit", "Débruitage", ])
+tab = st.sidebar.radio("Navigation", ["Accueil", "Correction rapide", "Détectage de Bruit", "Débruitage"])
 
 if tab == "Accueil":
     st.write("")  # Pour afficher uniquement l'image en arrière-plan
@@ -67,7 +64,6 @@ elif tab == "Débruitage":
             st.error(f"Erreur lors du chargement de l'audio : {str(e)}")
             st.stop()
 
-
         # Ajouter une dimension pour le lot
         waveform = waveform.unsqueeze(0)  # Pour [1, canaux, longueur]
 
@@ -82,7 +78,6 @@ elif tab == "Débruitage":
         # Sauvegarder la voix isolée sans bruit
         temp_dir = tempfile.gettempdir()
         isolated_voice_path = f"{temp_dir}/voix_isolee_{uuid.uuid4().hex}.wav"
-        #isolated_voice_path = "voix_isolee.wav"
         sf.write(isolated_voice_path, vocal_source.cpu().numpy(), sr)
 
         # Jouer et proposer de télécharger la voix isolée
@@ -173,46 +168,50 @@ elif tab == "Détectage de Bruit":
 elif tab == "Correction rapide":
     st.header("Correction rapide")
 
+    # Permet à l'utilisateur de télécharger un fichier audio
     uploaded_file = st.file_uploader("Téléchargez un fichier audio (MP3 ou WAV)", type=["mp3", "wav"])
 
     if uploaded_file is not None:
-        # Charger le fichier audio
-        waveform, sr = torchaudio.load(uploaded_file)
+        try:
+            # Charger le fichier audio
+            waveform, sr = torchaudio.load(uploaded_file)
 
-        # Ajouter une dimension pour le lot
-        waveform = waveform.unsqueeze(0)  # Pour [1, canaux, longueur]
+            # Ajouter une dimension pour le lot
+            waveform = waveform.unsqueeze(0)  # Pour [1, canaux, longueur]
 
-        # Appliquer le modèle pour séparer les sources
-        with st.spinner("Séparation des sources..."):
-            sources = apply_model(model, waveform, split=True)
+            # Appliquer le modèle pour séparer les sources
+            with st.spinner("Séparation des sources..."):
+                sources = apply_model(model, waveform, split=True)
 
-        # Sélectionner la source vocale (index 3 dans 'mdx_extra')
-        vocal_source = sources[0, 3, :, :]
-        vocal_source = torch.mean(vocal_source, dim=0)  # Conversion mono
+            # Sélectionner la source vocale (index 3 dans 'mdx_extra')
+            vocal_source = sources[0, 3, :, :]
+            vocal_source = torch.mean(vocal_source, dim=0)  # Conversion mono
 
-        # Sauvegarder la voix isolée sans bruit
-        temp_dir = tempfile.gettempdir()
-        isolated_voice_path = f"{temp_dir}/voix_isolee_{uuid.uuid4().hex}.wav"
-        #isolated_voice_path = "voix_isolee.wav"
-        sf.write(isolated_voice_path, vocal_source.cpu().numpy(), sr)
+            # Sauvegarder la voix isolée sans bruit
+            temp_dir = tempfile.gettempdir()
+            isolated_voice_path = f"{temp_dir}/voix_isolee_{uuid.uuid4().hex}.wav"
+            sf.write(isolated_voice_path, vocal_source.cpu().numpy(), sr)
 
-        # Appliquer un filtre passe-bas pour lisser le signal
-        voice, sr = sf.read(isolated_voice_path)
-        sos = signal.butter(10, 1500, 'lp', fs=sr, output='sos')
-        filtered_voice = signal.sosfilt(sos, voice)
+            # Appliquer un filtre passe-bas pour lisser le signal
+            voice, sr = sf.read(isolated_voice_path)
+            sos = signal.butter(10, 1500, 'lp', fs=sr, output='sos')
+            filtered_voice = signal.sosfilt(sos, voice)
 
-        # Sauvegarder le fichier filtré
-        filtered_voice_path = "voix_filtre.wav"
-        sf.write(filtered_voice_path, filtered_voice, sr)
+            # Sauvegarder le fichier filtré
+            filtered_voice_path = f"{temp_dir}/voix_filtre_{uuid.uuid4().hex}.wav"
+            sf.write(filtered_voice_path, filtered_voice, sr)
 
-        # Afficher et proposer de télécharger la voix filtrée
-        st.subheader("Voix filtrée")
-        st.audio(filtered_voice_path, format="audio/wav", start_time=0)
+            # Afficher et proposer de télécharger la voix filtrée
+            st.subheader("Voix filtrée")
+            st.audio(filtered_voice_path, format="audio/wav", start_time=0)
 
-        with open(filtered_voice_path, "rb") as file:
-            st.download_button(
-                label="Télécharger la voix filtrée",
-                data=file,
-                file_name="voix_filtre.wav",
-                mime="audio/wav",
-            )
+            with open(filtered_voice_path, "rb") as file:
+                st.download_button(
+                    label="Télécharger la voix filtrée",
+                    data=file,
+                    file_name="voix_filtre.wav",
+                    mime="audio/wav",
+                )
+        except Exception as e:
+            st.error(f"Erreur lors du traitement de l'audio : {str(e)}")
+            st.stop()
