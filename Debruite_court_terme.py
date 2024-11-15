@@ -10,6 +10,11 @@ import scipy.signal as signal
 import streamlit as st
 import soundfile as sf
 import base64
+import tempfile
+import uuid
+
+
+
 
 # Charger le modèle pré-entraîné de Demucs
 model = pretrained.get_model('mdx_extra')
@@ -56,8 +61,12 @@ elif tab == "Débruitage":
     uploaded_file = st.file_uploader("Téléchargez un fichier audio (MP3 ou WAV)", type=["mp3", "wav"])
 
     if uploaded_file is not None:
-        # Charger le fichier audio
-        waveform, sr = torchaudio.load(uploaded_file)
+        try:
+            waveform, sr = torchaudio.load(uploaded_file)
+        except Exception as e:
+            st.error(f"Erreur lors du chargement de l'audio : {str(e)}")
+            st.stop()
+
 
         # Ajouter une dimension pour le lot
         waveform = waveform.unsqueeze(0)  # Pour [1, canaux, longueur]
@@ -71,7 +80,9 @@ elif tab == "Débruitage":
         vocal_source = torch.mean(vocal_source, dim=0)  # Conversion mono
 
         # Sauvegarder la voix isolée sans bruit
-        isolated_voice_path = "voix_isolee.wav"
+        temp_dir = tempfile.gettempdir()
+        isolated_voice_path = f"{temp_dir}/voix_isolee_{uuid.uuid4().hex}.wav"
+        #isolated_voice_path = "voix_isolee.wav"
         sf.write(isolated_voice_path, vocal_source.cpu().numpy(), sr)
 
         # Jouer et proposer de télécharger la voix isolée
@@ -180,7 +191,9 @@ elif tab == "Correction rapide":
         vocal_source = torch.mean(vocal_source, dim=0)  # Conversion mono
 
         # Sauvegarder la voix isolée sans bruit
-        isolated_voice_path = "voix_isolee.wav"
+        temp_dir = tempfile.gettempdir()
+        isolated_voice_path = f"{temp_dir}/voix_isolee_{uuid.uuid4().hex}.wav"
+        #isolated_voice_path = "voix_isolee.wav"
         sf.write(isolated_voice_path, vocal_source.cpu().numpy(), sr)
 
         # Appliquer un filtre passe-bas pour lisser le signal
