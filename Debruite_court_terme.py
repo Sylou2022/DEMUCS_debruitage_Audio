@@ -1,3 +1,4 @@
+import streamlit as st  # Import Streamlit en premier
 import torch
 from demucs import pretrained
 from demucs.apply import apply_model
@@ -7,17 +8,28 @@ import librosa
 import librosa.display
 import matplotlib.pyplot as plt
 import scipy.signal as signal
-import streamlit as st
 import soundfile as sf
 import base64
 import tempfile
 import uuid
+import os
 
-# Charger le modèle pré-entraîné de Demucs
-model = pretrained.get_model('mdx_extra')
-
-# Configuration de la page Streamlit
+# **La configuration de la page doit être la première commande Streamlit**
 st.set_page_config(page_title="Traitement Audio", page_icon="🎵", layout="wide")
+
+# Charger le modèle pré-entraîné de Demucs avec gestion des erreurs
+@st.cache_resource
+def load_model():
+    try:
+        model = pretrained.get_model('mdx_extra')
+        model.cpu()  # S'assurer que le modèle est sur CPU pour compatibilité
+        return model
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du modèle : {str(e)}")
+        st.stop()
+
+# Charger le modèle au démarrage
+model = load_model()
 
 # Ajout de l'image d'accueil avec style
 def add_background(image_path):
@@ -35,6 +47,7 @@ def add_background(image_path):
         unsafe_allow_html=True
     )
 
+# Appel à `add_background` doit venir après les définitions de fonctions et `st.set_page_config()`
 add_background("image_audio.jpeg")  # Remplacez par le chemin vers votre image
 
 # Afficher le titre et une description sur la page d'accueil
@@ -69,7 +82,11 @@ elif tab == "Débruitage":
 
         # Appliquer le modèle pour séparer les sources
         with st.spinner("Isolation des sources..."):
-            sources = apply_model(model, waveform, split=True)
+            try:
+                sources = apply_model(model, waveform, split=True)
+            except Exception as e:
+                st.error(f"Erreur lors de l'application du modèle : {str(e)}")
+                st.stop()
 
         # Sélectionner la source vocale (index 3 dans 'mdx_extra')
         vocal_source = sources[0, 3, :, :]
@@ -98,12 +115,20 @@ elif tab == "Détectage de Bruit":
 
     if uploaded_file is not None:
         # Charger le fichier audio
-        waveform, sr = torchaudio.load(uploaded_file, backend="soundfile")
-        waveform = waveform.unsqueeze(0)
+        try:
+            waveform, sr = torchaudio.load(uploaded_file, backend="soundfile")
+            waveform = waveform.unsqueeze(0)
+        except Exception as e:
+            st.error(f"Erreur lors du chargement de l'audio : {str(e)}")
+            st.stop()
 
         # Appliquer le modèle pour séparer les sources
         with st.spinner("Extraction du bruit..."):
-            sources = apply_model(model, waveform, split=True)
+            try:
+                sources = apply_model(model, waveform, split=True)
+            except Exception as e:
+                st.error(f"Erreur lors de l'application du modèle : {str(e)}")
+                st.stop()
 
         # Extraire la source de bruit
         noise_source = sources[0, 2, :, :].cpu().numpy()
@@ -149,26 +174,9 @@ elif tab == "Détectage de Bruit":
         else:
             st.info("Aucun bruit continu détecté.")
 
-        # Sauvegarder le bruit isolé
-        noise_path = "bruit_isole.wav"
-        sf.write(noise_path, noise_source, sr)
-
-        # Jouer et proposer de télécharger le bruit isolé
-        st.subheader("Bruit isolé")
-        st.audio(noise_path, format="audio/wav", start_time=0)
-
-        with open(noise_path, "rb") as file:
-            st.download_button(
-                label="Télécharger le bruit isolé",
-                data=file,
-                file_name="bruit_isole.wav",
-                mime="audio/wav",
-            )
-
 elif tab == "Correction rapide":
     st.header("Correction rapide")
 
-    # Permet à l'utilisateur de télécharger un fichier audio
     uploaded_file = st.file_uploader("Téléchargez un fichier audio (MP3 ou WAV)", type=["mp3", "wav"])
 
     if uploaded_file is not None:
@@ -197,6 +205,9 @@ elif tab == "Correction rapide":
             sos = signal.butter(10, 1500, 'lp', fs=sr, output='sos')
             filtered_voice = signal.sosfilt(sos, voice)
 
+            # Normaliser le signal filtré
+            filtered_voice = np.int16(filtered_voice / np.max(np.abs(filtered_voice)) * 32767)
+
             # Sauvegarder le fichier filtré
             filtered_voice_path = f"{temp_dir}/voix_filtre_{uuid.uuid4().hex}.wav"
             sf.write(filtered_voice_path, filtered_voice, sr)
@@ -213,5 +224,4 @@ elif tab == "Correction rapide":
                     mime="audio/wav",
                 )
         except Exception as e:
-            st.error(f"Erreur lors du traitement de l'audio : {str(e)}")
-            st.stop()
+            st.error(f"Une erreur est survenue : {str(e)}")
